@@ -1,4 +1,4 @@
 #ddev-generated
 # If omit_containers[ddev-router] then this file will be replaced
-# with another with a 'ports' statement to directly expose port 3000 to 9400
+# with another with a 'ports' statement that exposes port 3000 as 127.0.0.1:9400
 services: {}
