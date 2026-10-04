@@ -30,6 +30,8 @@ services:
       - ADMIN_EMAIL=${LIBREDB_STUDIO_ADMIN_EMAIL:-admin@ddev.site}
       - ADMIN_PASSWORD=${LIBREDB_STUDIO_ADMIN_PASSWORD:?is not set; run 'ddev restart', which creates .ddev/.env.libredb-studio.local}
       - JWT_SECRET=${LIBREDB_STUDIO_JWT_SECRET:?is not set; run 'ddev restart', which creates .ddev/.env.libredb-studio.local}
+      # Written by the pre-start hook only while Git ignores the secrets file; see libredb-studio/ensure-secrets.sh.
+      - LIBREDB_STUDIO_GIT_GUARD=${LIBREDB_STUDIO_GIT_GUARD:?is not set because Git does not ignore .ddev/.env.libredb-studio.local; fix .ddev/.gitignore as the pre-start message says, then run 'ddev restart'}
       # Saved queries, history and settings, kept in the volume below.
       - STORAGE_PROVIDER=sqlite
       - STORAGE_SQLITE_PATH=/app/data/libredb-storage.db

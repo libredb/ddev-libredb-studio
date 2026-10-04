@@ -260,6 +260,23 @@ teardown() {
   run ddev restart -y
   assert_success
   health_checks
+
+  # The file exists now; taking the rule out again must stop the next start,
+  # although DDEV only warns about a failed hook, and must keep the secrets.
+  grep -v -e '\.env\.\*\.local' .ddev/.gitignore > .ddev/.gitignore.new
+  mv .ddev/.gitignore.new .ddev/.gitignore
+  run ddev restart -y
+  assert_failure
+  assert_output --partial "Git does not ignore .ddev/.env.libredb-studio.local"
+  assert_output --partial "LIBREDB_STUDIO_GIT_GUARD"
+  assert_file_exist "${SECRETS_FILE}"
+  run grep -q '^LIBREDB_STUDIO_ADMIN_PASSWORD=.' "${SECRETS_FILE}"
+  assert_success
+
+  echo '/.env.*.local' >> .ddev/.gitignore
+  run ddev restart -y
+  assert_success
+  health_checks
 }
 
 @test "a project without a db container gets no db connection" {
