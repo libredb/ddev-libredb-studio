@@ -63,7 +63,7 @@ This is the same exposure as any other value DDEV passes to a container, and the
 | ---------- | ----------- | ----------- |
 | DDEV db | Always, unless the project omits the `db` container | `db` / `db`, database `db` |
 | DDEV mongo | `LIBREDB_STUDIO_SEED_MONGO=true` and [ddev/ddev-mongo](https://github.com/ddev/ddev-mongo) | `MONGO_INITDB_ROOT_USERNAME` / `MONGO_INITDB_ROOT_PASSWORD`, default `db` / `db` |
-| DDEV redis | `LIBREDB_STUDIO_SEED_REDIS=true` and [ddev/ddev-redis](https://github.com/ddev/ddev-redis) | None |
+| DDEV redis | `LIBREDB_STUDIO_SEED_REDIS=true` and [ddev/ddev-redis](https://github.com/ddev/ddev-redis) | None. The optimized ddev-redis configuration (ACL users with a password) is not supported yet: the seeded connection then fails with `NOAUTH` |
 | DDEV sqlsrv | `LIBREDB_STUDIO_SEED_SQLSRV=true` and [ddev/ddev-sqlsrv](https://github.com/ddev/ddev-sqlsrv) | `SA` / `MSSQL_SA_PASSWORD`, default `Password12!` |
 
 Every connection is managed: its password stays on the server, and the connection cannot be edited in the browser.

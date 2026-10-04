@@ -129,13 +129,15 @@ configs:
         printf 'ddev-%s-%s' "$${SITE}" "$$1"
       }
 
+      # Bounded by the clock, not by a count of tries: each lookup is capped at
+      # two seconds, so a slow resolver cannot stretch the wait past
+      # WAIT_SECONDS.
       wait_for() {
-        waited=0
-        while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
-          if getent hosts "$$1" >/dev/null 2>&1; then
+        deadline=$$(($$(date +%s) + WAIT_SECONDS))
+        while [ "$$(date +%s)" -lt "$${deadline}" ]; do
+          if timeout 2 getent hosts "$$1" >/dev/null 2>&1; then
             return 0
           fi
-          waited=$$((waited + 1))
           sleep 1
         done
         return 1
