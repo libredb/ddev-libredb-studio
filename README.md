@@ -111,7 +111,7 @@ All customization options (use with caution):
 
 | Variable | Flag | Default |
 | -------- | ---- | ------- |
-| `LIBREDB_STUDIO_DOCKER_IMAGE` | `--libredb-studio-docker-image` | `ghcr.io/libredb/libredb-studio:0.17.0` |
+| `LIBREDB_STUDIO_DOCKER_IMAGE` | `--libredb-studio-docker-image` | `ghcr.io/libredb/libredb-studio:0.18.0` |
 | `LIBREDB_STUDIO_ADMIN_EMAIL` | `--libredb-studio-admin-email` | `admin@ddev.site` |
 | `LIBREDB_STUDIO_SEED_DB` | `--libredb-studio-seed-db` | `true` |
 | `LIBREDB_STUDIO_SEED_MONGO` | `--libredb-studio-seed-mongo` | `false` |

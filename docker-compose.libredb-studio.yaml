@@ -2,7 +2,7 @@
 services:
   libredb-studio:
     container_name: ddev-${DDEV_SITENAME}-libredb-studio
-    image: ${LIBREDB_STUDIO_DOCKER_IMAGE:-ghcr.io/libredb/libredb-studio:0.17.0}
+    image: ${LIBREDB_STUDIO_DOCKER_IMAGE:-ghcr.io/libredb/libredb-studio:0.18.0}
     hostname: ${DDEV_SITENAME}-libredb-studio
     restart: "no"
     # These labels ensure this service is discoverable by DDEV.
