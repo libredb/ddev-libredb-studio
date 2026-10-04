@@ -1,0 +1,15 @@
+#ddev-generated
+services:
+  libredb-studio:
+    container_name: ddev-${DDEV_SITENAME}-libredb-studio
+    image: ${LIBREDB_STUDIO_DOCKER_IMAGE:-ddev/ddev-utilities:latest}
+    command: ["sh", "-c", "trap exit TERM; sleep infinity & wait"]
+    restart: "no"
+    # These labels ensure this service is discoverable by DDEV.
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+
+    volumes:
+      - ".:/mnt/ddev_config"
+      - "ddev-global-cache:/mnt/ddev-global-cache"

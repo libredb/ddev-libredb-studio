@@ -1,0 +1,6 @@
+name: libredb-studio
+
+project_files:
+  - docker-compose.libredb-studio.yaml
+
+ddev_version_constraint: '>= v1.24.10'
