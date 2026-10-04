@@ -2,14 +2,266 @@
 services:
   libredb-studio:
     container_name: ddev-${DDEV_SITENAME}-libredb-studio
-    image: ${LIBREDB_STUDIO_DOCKER_IMAGE:-ddev/ddev-utilities:latest}
-    command: ["sh", "-c", "trap exit TERM; sleep infinity & wait"]
+    image: ${LIBREDB_STUDIO_DOCKER_IMAGE:-ghcr.io/libredb/libredb-studio:0.17.0}
+    hostname: ${DDEV_SITENAME}-libredb-studio
     restart: "no"
     # These labels ensure this service is discoverable by DDEV.
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
       com.ddev.approot: ${DDEV_APPROOT}
-
+    expose:
+      - "3000"
+    # Starts as root like the image does: the image's entrypoint chowns the
+    # data volume and drops to its nextjs user (uid 1001). Ours only decides
+    # which seed connections apply, then execs the image's entrypoint.
+    entrypoint: ["/bin/sh", "/usr/local/bin/ddev-libredb-studio-entrypoint.sh"]
+    command: ["node", "server.js"]
+    environment:
+      - VIRTUAL_HOST=${DDEV_HOSTNAME}
+      - HTTP_EXPOSE=9400:3000
+      - HTTPS_EXPOSE=9401:3000
+      # Login. The two secrets come from .ddev/.env.libredb-studio.local,
+      # which the add-on generates and refuses to write where Git would pick
+      # it up. DDEV also writes the resolved values into
+      # .ddev/.ddev-docker-compose-full.yaml (gitignored, made owner-only by
+      # the post-start hook in config.libredb-studio.yaml) and they show in
+      # `docker inspect`, both on this machine only.
+      - NEXT_PUBLIC_AUTH_PROVIDER=local
+      - ADMIN_EMAIL=${LIBREDB_STUDIO_ADMIN_EMAIL:-admin@ddev.site}
+      - ADMIN_PASSWORD=${LIBREDB_STUDIO_ADMIN_PASSWORD:?is not set; run 'ddev restart', which creates .ddev/.env.libredb-studio.local}
+      - JWT_SECRET=${LIBREDB_STUDIO_JWT_SECRET:?is not set; run 'ddev restart', which creates .ddev/.env.libredb-studio.local}
+      # Saved queries, history and settings, kept in the volume below.
+      - STORAGE_PROVIDER=sqlite
+      - STORAGE_SQLITE_PATH=/app/data/libredb-storage.db
+      # The project's own databases replace the built-in sample databases.
+      - SQLITE_EMBEDDED_SAMPLE=false
+      - LIBREDB_EMBEDDED_SAMPLE=false
+      # Written by the entrypoint on every start from the fragments below.
+      - SEED_CONFIG_PATH=/tmp/ddev-libredb-studio/seed-connections.yaml
+      # Read by the entrypoint, which seeds a service only when this project's
+      # own container for it exists. Every DDEV project shares the
+      # ddev_default network, where the short service names (db, mongo, ...)
+      # also resolve to other projects' containers, so the entrypoint and the
+      # seed fragments only ever use the project-specific container names
+      # ddev-${DDEV_SITENAME}-<service>. The opt-in flags default to false.
+      - DDEV_SITENAME=${DDEV_SITENAME}
+      - DDEV_DATABASE_FAMILY=${DDEV_DATABASE_FAMILY}
+      - LIBREDB_STUDIO_SEED_DB=${LIBREDB_STUDIO_SEED_DB:-true}
+      - LIBREDB_STUDIO_SEED_MONGO=${LIBREDB_STUDIO_SEED_MONGO:-false}
+      - LIBREDB_STUDIO_SEED_REDIS=${LIBREDB_STUDIO_SEED_REDIS:-false}
+      - LIBREDB_STUDIO_SEED_SQLSRV=${LIBREDB_STUDIO_SEED_SQLSRV:-false}
+      # Passwords the seed fragments reference. These are the documented fixed
+      # development credentials of DDEV and of its database add-ons, read
+      # through the same variables those add-ons read, so an override in
+      # .ddev/.env.mongo or .ddev/.env.sqlsrv reaches Studio as well.
+      - LIBREDB_STUDIO_DB_PASSWORD=db
+      - LIBREDB_STUDIO_MONGO_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:-db}
+      - LIBREDB_STUDIO_SQLSRV_PASSWORD=${MSSQL_SA_PASSWORD:-Password12!}
+    configs:
+      - source: libredb-studio-entrypoint.sh
+        target: /usr/local/bin/ddev-libredb-studio-entrypoint.sh
+        mode: "0755"
+      - source: libredb-studio-seed-db
+        target: /etc/libredb-studio/connections/db.yaml
+        mode: "0444"
+      - source: libredb-studio-seed-mongo
+        target: /etc/libredb-studio/connections/mongo.yaml
+        mode: "0444"
+      - source: libredb-studio-seed-redis
+        target: /etc/libredb-studio/connections/redis.yaml
+        mode: "0444"
+      - source: libredb-studio-seed-sqlsrv
+        target: /etc/libredb-studio/connections/sqlsrv.yaml
+        mode: "0444"
+    # No bind mount from the project: everything the container needs comes
+    # in as configs above, so the add-on also works with DDEV's no_bind_mounts.
     volumes:
-      - ".:/mnt/ddev_config"
-      - "ddev-global-cache:/mnt/ddev-global-cache"
+      - "libredb-studio:/app/data"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/db/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    x-ddev:
+      describe-info: |
+        User: ${LIBREDB_STUDIO_ADMIN_EMAIL:-admin@ddev.site}
+        Password: run 'ddev libredb-studio'
+
+volumes:
+  libredb-studio:
+
+configs:
+  # Writes the seed connection file of LibreDB Studio from the connections
+  # whose service exists in this project, then hands over to the image's own
+  # entrypoint, unchanged. Every $ of the script is written $$, so that Docker
+  # Compose leaves it for the shell.
+  #
+  # The project database is seeded by default; DDEV reports a
+  # DDEV_DATABASE_FAMILY even for a project that omits the db container, so
+  # its fragment is used only when this project's db container answers, and a
+  # project without one gets a log line and no db connection. MongoDB, Redis
+  # and SQL Server come from other add-ons and are opt-in: when one is switched
+  # on and its container is missing, the container stops with an error instead
+  # of starting without the connection that was asked for.
+  libredb-studio-entrypoint.sh:
+    content: |
+      #!/bin/sh
+      set -eu
+
+      FRAGMENTS=/etc/libredb-studio/connections
+      SEED_FILE="$${SEED_CONFIG_PATH:?is not set}"
+      SITE="$${DDEV_SITENAME:?is not set}"
+
+      # Seconds to wait for a container name to resolve; the containers of a
+      # project start together, so one that exists can take a moment to appear.
+      WAIT_SECONDS="$${LIBREDB_STUDIO_WAIT_SECONDS:-30}"
+      case "$${WAIT_SECONDS}" in
+        '' | *[!0-9]*)
+          echo "ddev-libredb-studio: LIBREDB_STUDIO_WAIT_SECONDS must be a whole number of seconds, got '$${WAIT_SECONDS}'" >&2
+          exit 1
+          ;;
+      esac
+
+      # Never the short service name: on the shared ddev_default network it
+      # also resolves to the container of another running DDEV project.
+      container_of() {
+        printf 'ddev-%s-%s' "$${SITE}" "$$1"
+      }
+
+      wait_for() {
+        waited=0
+        while [ "$${waited}" -lt "$${WAIT_SECONDS}" ]; do
+          if getent hosts "$$1" >/dev/null 2>&1; then
+            return 0
+          fi
+          waited=$$((waited + 1))
+          sleep 1
+        done
+        return 1
+      }
+
+      selected=""
+
+      # seed_service <flag name> <flag value> <service> <optional|required> <how to get the service>
+      seed_service() {
+        case "$$2" in
+          true) ;;
+          false) return 0 ;;
+          *)
+            echo "ddev-libredb-studio: $$1 must be true or false, got '$$2'" >&2
+            exit 1
+            ;;
+        esac
+        container="$$(container_of "$$3")"
+        if wait_for "$${container}"; then
+          selected="$${selected} $${FRAGMENTS}/$$3.yaml"
+          echo "ddev-libredb-studio: seeding the '$$3' service ($${container})"
+          return 0
+        fi
+        if [ "$$4" = "required" ]; then
+          echo "ddev-libredb-studio: $$1=true, but no '$$3' service ($${container}) answers in this project after $${WAIT_SECONDS} seconds. $$5, or set $$1=false in .ddev/.env.libredb-studio." >&2
+          exit 1
+        fi
+        echo "ddev-libredb-studio: this project has no '$$3' service ($${container}), so it has no DDEV database connection. $$5 to get one, or set $$1=false in .ddev/.env.libredb-studio to skip this wait." >&2
+      }
+
+      case "$${DDEV_DATABASE_FAMILY:-}" in
+        mysql | postgres) ;;
+        *)
+          echo "ddev-libredb-studio: DDEV_DATABASE_FAMILY is '$${DDEV_DATABASE_FAMILY:-}', expected mysql or postgres" >&2
+          exit 1
+          ;;
+      esac
+
+      seed_service LIBREDB_STUDIO_SEED_DB "$${LIBREDB_STUDIO_SEED_DB:-true}" db optional \
+        "Remove db from omit_containers in .ddev/config.yaml"
+      seed_service LIBREDB_STUDIO_SEED_MONGO "$${LIBREDB_STUDIO_SEED_MONGO:-false}" mongo required \
+        "Run 'ddev add-on get ddev/ddev-mongo'"
+      seed_service LIBREDB_STUDIO_SEED_REDIS "$${LIBREDB_STUDIO_SEED_REDIS:-false}" redis required \
+        "Run 'ddev add-on get ddev/ddev-redis'"
+      seed_service LIBREDB_STUDIO_SEED_SQLSRV "$${LIBREDB_STUDIO_SEED_SQLSRV:-false}" sqlsrv required \
+        "Run 'ddev add-on get ddev/ddev-sqlsrv'"
+
+      # Rewritten on every start, so a service added or removed since the last
+      # start is reflected. No file at all means no seed connections to Studio,
+      # which is the right answer when nothing was selected.
+      rm -f "$${SEED_FILE}"
+      if [ -n "$${selected}" ]; then
+        mkdir -p "$$(dirname "$${SEED_FILE}")"
+        # The fragments hold no secret: passwords are $${VAR} references that
+        # Studio resolves from its own environment.
+        # shellcheck disable=SC2086 # word splitting of the fragment list is intended
+        {
+          printf 'version: "1"\nconnections:\n'
+          cat $${selected}
+        } >"$${SEED_FILE}"
+        chmod 0444 "$${SEED_FILE}"
+      fi
+
+      exec docker-entrypoint.sh "$$@"
+
+  # One seed connection per service, as list items of the file that the
+  # entrypoint assembles. Studio's own ${VAR} references are written
+  # $${VAR}, so that Docker Compose leaves them for Studio; ${DDEV_...} and
+  # the add-on defaults are filled in by Compose. The host is always this
+  # project's own container name, never the short service name, which on the
+  # shared ddev_default network can reach another project's container. Every
+  # connection is managed (its credentials stay on the server and cannot be
+  # edited in the UI) and admin-only, because each one logs in with a
+  # superuser or root account.
+  libredb-studio-seed-db:
+    content: |
+      - id: ddev-db
+        name: "DDEV db (${DDEV_DATABASE})"
+        type: ${DDEV_DATABASE_FAMILY}
+        host: ddev-${DDEV_SITENAME}-db
+        database: db
+        user: db
+        password: "$${LIBREDB_STUDIO_DB_PASSWORD}"
+        # The DDEV db container serves no TLS.
+        ssl:
+          mode: disable
+        environment: development
+        managed: true
+        roles: ["admin"]
+  libredb-studio-seed-mongo:
+    content: |
+      - id: ddev-mongo
+        name: "DDEV mongo"
+        type: mongodb
+        host: ddev-${DDEV_SITENAME}-mongo
+        port: 27017
+        database: ${MONGO_INITDB_DATABASE:-db}
+        user: ${MONGO_INITDB_ROOT_USERNAME:-db}
+        password: "$${LIBREDB_STUDIO_MONGO_PASSWORD}"
+        authSource: admin
+        environment: development
+        managed: true
+        roles: ["admin"]
+  libredb-studio-seed-redis:
+    content: |
+      - id: ddev-redis
+        name: "DDEV redis"
+        type: redis
+        host: ddev-${DDEV_SITENAME}-redis
+        port: 6379
+        environment: development
+        managed: true
+        roles: ["admin"]
+  libredb-studio-seed-sqlsrv:
+    content: |
+      - id: ddev-sqlsrv
+        name: "DDEV sqlsrv"
+        type: mssql
+        host: ddev-${DDEV_SITENAME}-sqlsrv
+        port: 1433
+        database: ${MSSQL_DB_NAME:-master}
+        user: SA
+        password: "$${LIBREDB_STUDIO_SQLSRV_PASSWORD}"
+        environment: development
+        managed: true
+        roles: ["admin"]
+        # Encrypted, trusting the container's self-signed certificate.
+        ssl:
+          mode: require

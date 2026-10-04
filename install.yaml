@@ -1,6 +1,40 @@
+# Details about the install.yaml file are at https://ddev.readthedocs.io/en/stable/users/extend/additional-services/#sections-and-features-of-ddev-get-add-on-installyaml
+
 name: libredb-studio
 
 project_files:
   - docker-compose.libredb-studio.yaml
+  - docker-compose.libredb-studio_norouter.yaml
+  - config.libredb-studio.yaml
+  - libredb-studio/ensure-secrets.sh
+  - commands/host/libredb-studio
 
-ddev_version_constraint: '>= v1.24.10'
+# v1.25.4 is the first version that reads .ddev/.env.<service>.local files,
+# where the generated login secrets live; older versions silently ignore them.
+ddev_version_constraint: '>= v1.25.4'
+
+# post_install_actions are executed in the context of the target project's .ddev directory.
+post_install_actions:
+  - |
+    #ddev-description:Create the LibreDB Studio login secrets
+    bash libredb-studio/ensure-secrets.sh
+  - |
+    #ddev-description:If router disabled, directly expose port
+    #
+    if ( {{ contains "ddev-router" (list .DdevGlobalConfig.omit_containers | toString) }} ); then
+      printf "#ddev-generated\nservices:\n  libredb-studio:\n    ports:\n      - 9400:3000\n" > docker-compose.libredb-studio_norouter.yaml
+    fi
+  - |
+    echo "You can now use 'ddev libredb-studio' to launch LibreDB Studio"
+
+# removal_actions are executed in the context of the target project's .ddev directory.
+removal_actions:
+  - |
+    #ddev-description:Remove the LibreDB Studio login secrets
+    rm -f .env.libredb-studio.local
+  - |
+    #ddev-description:Point at the data the add-on leaves behind
+    echo "Saved queries and settings stay in the Docker volume ddev-${DDEV_PROJECT}_libredb-studio; remove it with 'docker volume rm ddev-${DDEV_PROJECT}_libredb-studio' after 'ddev restart' if you no longer need them."
+    if [ -f .env.libredb-studio ]; then
+      echo "Your settings in .ddev/.env.libredb-studio were left in place; delete that file if you no longer need it."
+    fi

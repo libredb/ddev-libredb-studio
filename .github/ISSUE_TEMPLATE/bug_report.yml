@@ -1,4 +1,4 @@
-name: 🐞 Bug report or Support Request
+name: Bug report or Support Request
 description: Create a report to help us improve.
 labels: [bug]
 body:
@@ -40,6 +40,6 @@ body:
       description: |
         Links? References? Screenshots? Anything that will give us more context about your issue!
 
-        💡 Attach images or log files by clicking this area to highlight it and dragging files in.
+        Attach images or log files by clicking this area to highlight it and dragging files in.
     validations:
       required: false

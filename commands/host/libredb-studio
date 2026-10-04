@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+## #ddev-generated: If you want to edit and own this file, remove this line.
+## Description: Launch a browser with LibreDB Studio and print its login
+## Usage: libredb-studio
+## Example: "ddev libredb-studio"
+
+DDEV_LIBREDB_STUDIO_PORT=9400
+DDEV_LIBREDB_STUDIO_HTTPS_PORT=9401
+
+# Read from the running container, so that the login shown is the one Studio
+# uses, wherever it was set.
+if ! login="$(ddev exec -s libredb-studio printenv ADMIN_EMAIL ADMIN_PASSWORD 2>/dev/null)"; then
+    echo "LibreDB Studio is not running in this project. Run 'ddev start' and try again." >&2
+    exit 1
+fi
+email="$(printf '%s\n' "${login}" | sed -n 1p | tr -d '\r')"
+password="$(printf '%s\n' "${login}" | sed -n 2p | tr -d '\r')"
+
+if [ "${DDEV_PRIMARY_URL%://*}" = "http" ] || [ -n "${GITPOD_WORKSPACE_ID:-}" ] || [ "${CODESPACES:-}" = "true" ]; then
+    # Gitpod and Codespaces put their own HTTPS in front of the plain port, so
+    # the browser still accepts Studio's Secure cookie. A project served over
+    # plain http does not: Studio marks its login cookie Secure on any host
+    # that is not localhost, and the browser then drops it.
+    if [ -z "${GITPOD_WORKSPACE_ID:-}" ] && [ "${CODESPACES:-}" != "true" ]; then
+        # Studio trims and lower-cases the value, and reads off, false and 0
+        # as the cookie being allowed over http.
+        cookie_secure="$(ddev exec -s libredb-studio printenv AUTH_COOKIE_SECURE 2>/dev/null | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+        case "${cookie_secure}" in
+            false | off | 0) ;;
+            *)
+                echo "This project is served over plain http, where the browser drops LibreDB Studio's Secure login cookie." >&2
+                echo "Either run 'mkcert -install' and 'ddev restart' to use https, or allow the cookie over http with:" >&2
+                echo "  ddev dotenv set .ddev/.env.libredb-studio --auth-cookie-secure=false && ddev restart" >&2
+                exit 1
+                ;;
+        esac
+    fi
+    url_port=${DDEV_LIBREDB_STUDIO_PORT}
+else
+    url_port=${DDEV_LIBREDB_STUDIO_HTTPS_PORT}
+fi
+
+echo "LibreDB Studio login: ${email} / ${password}"
+ddev launch ":${url_port}"

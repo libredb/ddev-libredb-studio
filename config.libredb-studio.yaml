@@ -1,0 +1,15 @@
+#ddev-generated
+# DDEV merges these hooks with the project's own.
+hooks:
+  # Creates .ddev/.env.libredb-studio.local on any start where it is missing,
+  # for example the first start of a teammate who cloned a project whose .ddev
+  # directory is committed, and stops the start when Git would not ignore it.
+  pre-start:
+    - exec-host: bash .ddev/libredb-studio/ensure-secrets.sh
+  # DDEV writes the resolved login secrets into this gitignored file with the
+  # default file mode, usually readable by every local user. DDEV keeps the
+  # mode of the existing file when it rewrites it, so after the first start it
+  # stays readable by the owner only. A hardening step, not a guarantee: the
+  # values also show in `docker inspect` of the container.
+  post-start:
+    - exec-host: chmod 600 .ddev/.ddev-docker-compose-full.yaml

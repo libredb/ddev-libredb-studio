@@ -3,3 +3,9 @@ tests/ export-ignore
 .github/ export-ignore
 .gitattributes export-ignore
 .editorconfig export-ignore
+# The scripts run inside a Linux container and under bash, also when the
+# add-on is installed on Windows; the compose file carries the entrypoint
+# script inline
+*.sh text eol=lf
+*.yaml text eol=lf
+commands/host/* text eol=lf
