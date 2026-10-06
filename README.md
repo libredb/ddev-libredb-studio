@@ -42,7 +42,10 @@ Studio has no passwordless mode, so the add-on generates a login for each develo
 * Both are stored in `.ddev/.env.libredb-studio.local`, which only you can read and Git ignores, so a teammate who clones the project gets their own on their first `ddev start`.
 * `ddev libredb-studio` prints the login before it opens the browser.
 
-To start over with new values, delete `.ddev/.env.libredb-studio.local` and run `ddev restart`.
+LibreDB Studio 0.18.0 and later keep their accounts in the add-on's data volume, `ddev-<project>_libredb-studio`, and take the admin password from the secrets file only on their first start.
+A password created later, after the secrets file was deleted or the add-on was removed and added again, does not sign in while that volume holds the earlier account.
+To start over with new values, run `ddev stop`, delete `.ddev/.env.libredb-studio.local` and the volume with `docker volume rm ddev-<project>_libredb-studio`, then run `ddev start`.
+This also removes Studio's saved queries and settings.
 
 DDEV keeps `.ddev/.env.*.local` files out of Git through `.ddev/.gitignore`, but only while DDEV manages that file.
 Before it writes the secrets, and on every start, the add-on asks Git whether the file is ignored, and stops with an error if it is not.
@@ -132,6 +135,7 @@ ddev restart
 
 Removal deletes `.ddev/.env.libredb-studio.local`.
 Saved queries and settings stay in the Docker volume `ddev-<project>_libredb-studio` until you remove it with `docker volume rm`.
+The volume also keeps Studio's admin account, so after the add-on is added again its new password signs in only once that volume is removed (see [Login](#login)).
 
 ## Credits
 
