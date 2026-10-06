@@ -86,7 +86,8 @@ managed_connections() {
 query() {
   local body
   body="$(jq -cn --arg id "seed:$1" --arg sql "$2" '{connectionId: $id, sql: $sql}')"
-  run curl -sf --cookie .cookie-jar.txt -H 'Content-Type: application/json' --data "${body}" "${STUDIO_URL}/api/db/query"
+  # --fail-with-body keeps Studio's error in the output, so a failed query says why
+  run curl -s --fail-with-body --cookie .cookie-jar.txt -H 'Content-Type: application/json' --data "${body}" "${STUDIO_URL}/api/db/query"
   assert_success
 }
 
